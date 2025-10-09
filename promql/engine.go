@@ -3944,15 +3944,24 @@ func preprocessExprHelper(expr parser.Expr, start, end time.Time) (isStepInvaria
 	case *parser.Call:
 		_, ok := AtModifierUnsafeFunctions[n.Func.Name]
 		isStepInvariant := !ok
+		// A special case to allow timestamp() to be wrapped in a step invariant based off it's argument.
+		// timestamp() is considered AtModifierUnsafe, but it can be safe depending on it's arguments.
+		// ie timestamp(metric @ 1) is step invariant, but timestamp(abs(metric @ 1)) is not.
+		isTimestampWithAllArgsStepInvariantSafe := n.Func.Name == "timestamp"
 		shouldWrap := make([]bool, len(n.Args))
 		for i := range n.Args {
 			unwrapParenExpr(&n.Args[i])
 			var argIsStepInvariant bool
 			argIsStepInvariant, shouldWrap[i] = preprocessExprHelper(n.Args[i], start, end)
 			isStepInvariant = isStepInvariant && argIsStepInvariant
+
+			_, argIsVectorSelector := n.Args[i].(*parser.VectorSelector)
+			if !argIsStepInvariant || !argIsVectorSelector {
+				isTimestampWithAllArgsStepInvariantSafe = false
+			}
 		}
 
-		if isStepInvariant {
+		if isStepInvariant || isTimestampWithAllArgsStepInvariantSafe {
 			// The function and all arguments are step invariant.
 			return true, true
 		}
