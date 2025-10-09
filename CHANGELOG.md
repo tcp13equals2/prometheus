@@ -1,4 +1,4 @@
-# log
+# Changelog
 
 ## main / unreleased
 
